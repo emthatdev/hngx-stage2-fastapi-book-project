@@ -43,6 +43,8 @@ fastapi-book-project/
 - Pydantic
 - pytest
 - uvicorn
+- GitHub Actions
+- AWS EC2 (hosting)
 
 ## Installation
 
@@ -119,6 +121,111 @@ Available genres:
 ```bash
 pytest
 ```
+
+## Nginx Configuration
+
+The application uses Nginx as a reverse proxy. Below is a template for the configuration file (`nginx/fastapi.conf.template`)
+```
+server {
+    listen 80;
+    server_name {{ YOUR_DOMAIN_OR_IP }};
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Using Nginx configuration
+
+You can create your configuration file using the template as a guide and then place it in the default location on your server
+```
+sudo cp path-to-your-config-file /etc/nginx/   # Copy your config file to /etc/nginx/ directory
+sudo systemctl restart nginx
+```
+
+## CI/CD Pipeline
+
+The CI/CD pipeline is set up within the .github/workflows directory
+- CI Pipeline: Runs pytest on PRs to main branch
+- CD Pipeline: Automatically deploys the application on merges to the main branch
+
+### Create GitHub Secrets
+
+The deployment pipeline makes use of the following secrets:
+- **AWS_EC2_HOST**: Public IP or domain of your AWS EC2 instance
+- **AWS_EC2_USER**: EC2 user (usually `ubuntu` for Ubuntu, `ec2-user` for Amazon Linux, `admin` for Debian and `centos` for CentOS
+- **AWS_EC2_SSH_KEY**: Private SSH key
+
+---
+
+## Deployment Steps
+
+1. Launch a new AWS EC2 instance
+2. Set up the following Inbound Rules in your Security Group:
+  * SSH (port `22`) → Anywhere (`0.0.0.0/0`) or can be Your IP only (for security)
+  * HTTP (port `80`) → Anywhere (`0.0.0.0/0`)
+  * HTTPS (port `443 `) → Anywhere (`0.0.0.0/0`)
+3. Connect to your instance:
+   ```
+   ssh -i "your-private-key.pem" your-ec2-user@your-public-ip-or-dns
+   ```
+4. Update packages and install dependencies
+   ```
+   sudo apt update && sudo upgrade -y
+   sudo apt install python3 python3-pip python3-venv -y
+   pip install gunicorn
+   ```
+5. Clone the project, create virtual environment and install dependencies
+   ```
+   cd /home/your-ec2-user
+   git clone https://github.com/yourusername/your-repo.git fastapi-book-project
+   cd fastapi-book-project
+   python3 -m venv venv    
+   source venv/bin/activate    
+   pip install -r requirements.txt
+   ```
+5. Create a Gunicorn service file to run FastAPI in the background
+   ```
+   sudo nano /etc/systemd/system/fastapi.service
+   ```
+6. Add this to the file:
+   ```
+   [Unit]
+   Description=FastAPI Application
+   After=network.target
+    
+   [Service]
+   User=your-ec2-user
+   WorkingDirectory=/home/your-ec2-user/fastapi-book-project
+   ExecStart=/home/your-user/myapp/venv/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:8000
+   Restart=always
+    
+   [Install]
+   WantedBy=multi-user.target
+   ```
+7. Start the service:
+   ```
+   sudo systemctl daemon-reload
+   sudo systemctl enable 
+   sudo systemctl start fastapi
+   sudo systemctl status fastapi  # To check if it's running
+   sudo systemctl restart nginx
+   ```
+
+---
+
+## Deployed Application
+
+- 🌏 **API Base URL**: [http://13.60.196.123](http://13.60.196.123)
+- 📝 **Swagger UI**: [http://13.60.196.123/docs](http://13.60.196.123/docs)
+- 📝 **ReDoc**: [http://13.60.196.123/redoc](http://13.60.196.123/redoc)
+
+---
 
 ## Error Handling
 
